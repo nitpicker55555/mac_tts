@@ -11,7 +11,11 @@ import SwiftUI
 struct toast_talkApp: App {
     var body: some Scene {
         WindowGroup {
-            SimpleContentView()
+            ChatToastView()
+                .customWindowStyle()
+                .frame(width: 400, height: 400)
         }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
     }
 }
