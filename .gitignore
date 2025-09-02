@@ -91,3 +91,6 @@ iOSInjectionProject/
 
 # macOS
 .DS_Store
+
+# 配置文件（包含API密钥）
+Config.swift
