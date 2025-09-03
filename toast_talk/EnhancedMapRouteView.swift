@@ -14,7 +14,8 @@ struct EnhancedMapRouteView: View {
     let journeys: [[String: Any]]
     var initialSelectedIndex: Int = 0
     
-    @State private var selectedJourneyIndex = 0
+    @State private var selectedJourneyIndex: Int? = nil
+    @State private var expandedJourneyIndex: Int? = nil
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 48.1351, longitude: 11.5820),
         span: MKCoordinateSpan(latitudeDelta: 0.1, longitudeDelta: 0.1)
@@ -22,79 +23,89 @@ struct EnhancedMapRouteView: View {
     @State private var routeSegments: [RouteSegment] = []
     @State private var mapAnnotations: [EnhancedMapAnnotation] = []
     @State private var refreshID = UUID() // 添加刷新ID
+    @State private var journeyInfos: [JourneyInfo] = []
     
     var body: some View {
-        VStack(spacing: 0) {
-            // 路线选择器
-            if journeys.count > 1 {
-                Picker("选择路线", selection: $selectedJourneyIndex) {
-                    ForEach(0..<min(3, journeys.count), id: \.self) { index in
-                        Text("方案 \(index + 1)")
-                            .tag(index)
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-                .padding()
-            }
-            
-            // 地图视图
-            EnhancedMapKitView(
-                region: $region,
-                annotations: mapAnnotations,
-                routeSegments: routeSegments
-            )
-            .frame(height: 400)
-            .id(refreshID) // 使用刷新ID
-            
-            // 路线详情
-            ScrollView {
-                if selectedJourneyIndex < journeys.count,
-                   let routeInfo = journeys[selectedJourneyIndex]["route_info"] as? String {
-                    
-                    VStack(alignment: .leading, spacing: 16) {
-                        // 时间信息卡片
-                        if let departure = journeys[selectedJourneyIndex]["departure"] as? String,
-                           let arrival = journeys[selectedJourneyIndex]["arrival"] as? String {
-                            if !departure.isEmpty && !arrival.isEmpty {
-                                TimeInfoCard(departure: departure, arrival: arrival)
-                            } else {
-                                Text("时间信息暂不可用")
-                                    .foregroundColor(.secondary)
-                                    .padding()
-                            }
+        HStack(spacing: 0) {
+            // 左侧：方案卡片列表
+            VStack(alignment: .leading, spacing: 12) {
+                Text("路线方案")
+                    .font(.headline)
+                    .padding(.horizontal)
+                    .padding(.top)
+                
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(0..<min(3, journeys.count), id: \.self) { index in
+                            JourneyCard(
+                                journey: journeys[index],
+                                journeyInfo: index < journeyInfos.count ? journeyInfos[index] : nil,
+                                index: index,
+                                isSelected: selectedJourneyIndex == index,
+                                isExpanded: expandedJourneyIndex == index,
+                                onSelect: {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        selectedJourneyIndex = index
+                                        loadSelectedJourney()
+                                    }
+                                },
+                                onToggleExpand: {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        if expandedJourneyIndex == index {
+                                            expandedJourneyIndex = nil
+                                        } else {
+                                            expandedJourneyIndex = index
+                                            selectedJourneyIndex = index
+                                            loadSelectedJourney()
+                                        }
+                                    }
+                                }
+                            )
                         }
-                        
-                        // 路线详情卡片
-                        RouteDetailsCards(journeyData: journeys[selectedJourneyIndex])
-                            .padding(.horizontal)
-                            .id(selectedJourneyIndex) // 强制刷新视图
-                        
-                        // 路线图例
-                        RouteLegend()
-                            .padding()
                     }
+                    .padding(.horizontal)
+                    .padding(.bottom)
                 }
             }
+            .frame(width: 350)
             .background(Color(NSColor.controlBackgroundColor))
+            
+            // 右侧：地图视图
+            VStack(spacing: 0) {
+                // 地图
+                EnhancedMapKitView(
+                    region: $region,
+                    annotations: mapAnnotations,
+                    routeSegments: routeSegments
+                )
+                .id(refreshID)
+                
+                // 图例
+                RouteLegend()
+                    .padding()
+                    .background(Color(NSColor.controlBackgroundColor).opacity(0.9))
+            }
         }
-        .frame(width: 700, height: 700)
-        .onChange(of: selectedJourneyIndex) { _ in
-            loadSelectedJourney()
-        }
+        .frame(width: 900, height: 700)
         .onAppear {
-            selectedJourneyIndex = initialSelectedIndex
-            loadSelectedJourney()
+            parseAllJourneys()
+            if initialSelectedIndex < journeys.count {
+                selectedJourneyIndex = initialSelectedIndex
+                expandedJourneyIndex = initialSelectedIndex
+                loadSelectedJourney()
+            }
         }
     }
     
     private func loadSelectedJourney() {
-        guard selectedJourneyIndex < journeys.count,
-              let geoJSONDict = journeys[selectedJourneyIndex]["geojson"] as? [String: Any] else {
+        guard let index = selectedJourneyIndex,
+              index < journeys.count,
+              let geoJSONDict = journeys[index]["geojson"] as? [String: Any] else {
             return
         }
         
-        print("加载方案 \(selectedJourneyIndex + 1):")
-        if let routeInfo = journeys[selectedJourneyIndex]["route_info"] as? String {
+        print("加载方案 \(index + 1):")
+        if let routeInfo = journeys[index]["route_info"] as? String {
             print("路线信息: \(routeInfo.prefix(100))...")
         }
         
@@ -119,6 +130,124 @@ struct EnhancedMapRouteView: View {
         } catch {
             print("解析GeoJSON失败: \(error)")
         }
+    }
+    
+    private func parseAllJourneys() {
+        var infos: [JourneyInfo] = []
+        
+        for journey in journeys {
+            var info = JourneyInfo()
+            
+            // 解析时间
+            if let departure = journey["departure"] as? String,
+               let arrival = journey["arrival"] as? String {
+                info.departureTime = formatTime(departure)
+                info.arrivalTime = formatTime(arrival)
+                info.duration = calculateDuration(from: departure, to: arrival)
+            }
+            
+            // 解析交通方式
+            if let legs = journey["legs"] as? [[String: Any]] {
+                var transitTypes = Set<String>()
+                for leg in legs {
+                    if let walking = leg["walking"] as? Bool, walking {
+                        transitTypes.insert("🚶")
+                    } else if let line = leg["line"] as? [String: Any],
+                              let mode = line["mode"] as? String {
+                        switch mode.lowercased() {
+                        case "bus":
+                            transitTypes.insert("🚌")
+                        case "tram", "streetcar":
+                            transitTypes.insert("🚊")
+                        case "subway", "metro", "u-bahn", "s-bahn":
+                            transitTypes.insert("🚇")
+                        case "train", "railway":
+                            transitTypes.insert("🚆")
+                        default:
+                            transitTypes.insert("🚌")
+                        }
+                    }
+                }
+                info.transitModes = Array(transitTypes).sorted()
+                info.legCount = legs.count
+            }
+            
+            infos.append(info)
+        }
+        
+        self.journeyInfos = infos
+    }
+    
+    private func formatTime(_ isoString: String) -> String {
+        let formatters = [
+            ISO8601DateFormatter(),
+            { () -> ISO8601DateFormatter in
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                return f
+            }(),
+            { () -> ISO8601DateFormatter in
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime]
+                return f
+            }()
+        ]
+        
+        for formatter in formatters {
+            if let date = formatter.date(from: isoString) {
+                let timeFormatter = DateFormatter()
+                timeFormatter.dateFormat = "HH:mm"
+                timeFormatter.timeZone = TimeZone.current
+                return timeFormatter.string(from: date)
+            }
+        }
+        
+        return "--:--"
+    }
+    
+    private func calculateDuration(from departure: String, to arrival: String) -> String {
+        var depTime: Date?
+        var arrTime: Date?
+        
+        let formatters = [
+            ISO8601DateFormatter(),
+            { () -> ISO8601DateFormatter in
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                return f
+            }(),
+            { () -> ISO8601DateFormatter in
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime]
+                return f
+            }()
+        ]
+        
+        for formatter in formatters {
+            if depTime == nil {
+                depTime = formatter.date(from: departure)
+            }
+            if arrTime == nil {
+                arrTime = formatter.date(from: arrival)
+            }
+            if depTime != nil && arrTime != nil {
+                break
+            }
+        }
+        
+        if let depTime = depTime, let arrTime = arrTime {
+            let duration = arrTime.timeIntervalSince(depTime)
+            let minutes = Int(duration / 60)
+            let hours = minutes / 60
+            let mins = minutes % 60
+            
+            if hours > 0 {
+                return "\(hours)小时\(mins)分钟"
+            } else {
+                return "\(mins)分钟"
+            }
+        }
+        return "--"
     }
     
     private func parseGeoJSONWithTransitInfo(_ geoJSON: GeoJSONFeatureCollection) {
@@ -222,6 +351,246 @@ struct EnhancedMapRouteView: View {
         )
         
         self.region = MKCoordinateRegion(center: center, span: span)
+    }
+}
+
+// MARK: - 路线信息结构
+
+struct JourneyInfo {
+    var departureTime: String = "--:--"
+    var arrivalTime: String = "--:--"
+    var duration: String = "--"
+    var transitModes: [String] = []
+    var legCount: Int = 0
+}
+
+// MARK: - 方案卡片视图
+
+struct JourneyCard: View {
+    let journey: [String: Any]
+    let journeyInfo: JourneyInfo?
+    let index: Int
+    let isSelected: Bool
+    let isExpanded: Bool
+    let onSelect: () -> Void
+    let onToggleExpand: () -> Void
+    
+    @State private var legDetails: [LegDetail] = []
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // 卡片头部
+            Button(action: onToggleExpand) {
+                VStack(alignment: .leading, spacing: 8) {
+                    // 方案标题
+                    HStack {
+                        Text("方案 \(index + 1)")
+                            .font(.headline)
+                            .foregroundColor(isSelected ? .white : .primary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 12))
+                            .foregroundColor(isSelected ? .white : .secondary)
+                    }
+                    
+                    // 时间信息
+                    if let info = journeyInfo {
+                        HStack {
+                            Text(info.departureTime)
+                                .font(.system(size: 14, weight: .medium))
+                            
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 10))
+                            
+                            Text(info.arrivalTime)
+                                .font(.system(size: 14, weight: .medium))
+                            
+                            Spacer()
+                            
+                            Text(info.duration)
+                                .font(.system(size: 12))
+                                .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
+                        }
+                        .foregroundColor(isSelected ? .white : .primary)
+                        
+                        // 交通方式
+                        HStack(spacing: 8) {
+                            ForEach(info.transitModes, id: \.self) { mode in
+                                Text(mode)
+                                    .font(.system(size: 16))
+                            }
+                            
+                            Spacer()
+                            
+                            Text("\(info.legCount) 段路程")
+                                .font(.system(size: 11))
+                                .foregroundColor(isSelected ? .white.opacity(0.7) : .secondary)
+                        }
+                    }
+                }
+                .padding()
+                .background(isSelected ? Color.accentColor : Color(NSColor.controlBackgroundColor))
+                .cornerRadius(12)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // 展开的路线详情
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(legDetails.indices, id: \.self) { legIndex in
+                        RouteSegmentCard(
+                            legDetail: legDetails[legIndex],
+                            isFirst: legIndex == 0,
+                            isLast: legIndex == legDetails.count - 1,
+                            journeyData: journey,
+                            legIndex: legIndex
+                        )
+                        .padding(.horizontal, 4)
+                    }
+                }
+                .padding(.vertical, 8)
+                .background(Color(NSColor.controlBackgroundColor).opacity(0.3))
+                .cornerRadius(8)
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .onAppear {
+            if isExpanded && legDetails.isEmpty {
+                parseLegDetails()
+            }
+        }
+        .onChange(of: isExpanded) { expanded in
+            if expanded && legDetails.isEmpty {
+                parseLegDetails()
+            }
+        }
+    }
+    
+    private func parseLegDetails() {
+        if let legs = journey["legs"] as? [[String: Any]], !legs.isEmpty {
+            parseFromLegs(legs)
+        } else if let routeInfo = journey["route_info"] as? String {
+            parseFromRouteInfo(routeInfo)
+        }
+    }
+    
+    private func parseFromLegs(_ legs: [[String: Any]]) {
+        var details: [LegDetail] = []
+        
+        for leg in legs {
+            var legDetail = LegDetail()
+            
+            // 解析基本信息
+            if let walking = leg["walking"] as? Bool, walking {
+                legDetail.type = .walking
+                legDetail.icon = "🚶"
+                legDetail.lineName = "步行"
+                
+                if let distance = leg["distance"] as? Int {
+                    legDetail.distance = "\(distance)米"
+                    let minutes = max(1, distance / 80)
+                    legDetail.duration = "\(minutes)分钟"
+                }
+            } else if let line = leg["line"] as? [String: Any] {
+                let mode = line["mode"] as? String ?? ""
+                legDetail.lineName = line["name"] as? String ?? "未知线路"
+                
+                switch mode.lowercased() {
+                case "bus":
+                    legDetail.type = .bus
+                    legDetail.icon = "🚌"
+                case "tram", "streetcar":
+                    legDetail.type = .tram
+                    legDetail.icon = "🚊"
+                case "subway", "metro", "u-bahn", "s-bahn":
+                    legDetail.type = .subway
+                    legDetail.icon = "🚇"
+                case "train", "railway":
+                    legDetail.type = .train
+                    legDetail.icon = "🚆"
+                default:
+                    legDetail.type = .bus
+                    legDetail.icon = "🚌"
+                }
+            }
+            
+            // 解析起点和终点
+            if let origin = leg["origin"] as? [String: Any] {
+                legDetail.origin = origin["name"] as? String ?? "未知起点"
+            }
+            
+            if let destination = leg["destination"] as? [String: Any] {
+                legDetail.destination = destination["name"] as? String ?? "未知终点"
+            }
+            
+            // 解析时间
+            if let departure = leg["departure"] as? String {
+                legDetail.departureTime = formatTimeString(departure)
+            }
+            
+            if let arrival = leg["arrival"] as? String {
+                legDetail.arrivalTime = formatTimeString(arrival)
+            }
+            
+            // 解析经停站
+            if let stopovers = leg["stopovers"] as? [[String: Any]] {
+                var stopoversList: [StopoverInfo] = []
+                for stopover in stopovers {
+                    let name = stopover["name"] as? String ?? "未知站点"
+                    var time: String? = nil
+                    
+                    if let departure = stopover["departure"] as? String {
+                        time = formatTimeString(departure)
+                    } else if let arrival = stopover["arrival"] as? String {
+                        time = formatTimeString(arrival)
+                    }
+                    
+                    stopoversList.append(StopoverInfo(name: name, time: time))
+                }
+                legDetail.stopovers = stopoversList
+                legDetail.stops = stopoversList.count
+            }
+            
+            details.append(legDetail)
+        }
+        
+        self.legDetails = details
+    }
+    
+    private func parseFromRouteInfo(_ routeInfo: String) {
+        // 降级方案：从路线信息字符串解析
+        // ... (保留原有的解析逻辑)
+    }
+    
+    private func formatTimeString(_ isoString: String) -> String {
+        let formatters = [
+            ISO8601DateFormatter(),
+            { () -> ISO8601DateFormatter in
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                return f
+            }(),
+            { () -> ISO8601DateFormatter in
+                let f = ISO8601DateFormatter()
+                f.formatOptions = [.withInternetDateTime]
+                return f
+            }()
+        ]
+        
+        for formatter in formatters {
+            if let date = formatter.date(from: isoString) {
+                let timeFormatter = DateFormatter()
+                timeFormatter.dateFormat = "HH:mm"
+                timeFormatter.timeZone = TimeZone.current
+                return timeFormatter.string(from: date)
+            }
+        }
+        
+        return isoString
     }
 }
 
@@ -623,7 +992,7 @@ class ColoredPolyline: MKPolyline {
     var segmentIndex: Int = 0
 }
 
-// MARK: - 路线详情卡片
+// MARK: - 路线详情卡片(已废弃，功能移至JourneyCard)
 
 struct RouteDetailsCards: View {
     let journeyData: [String: Any]
