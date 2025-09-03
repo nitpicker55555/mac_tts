@@ -45,6 +45,9 @@ class LLMService: ObservableObject {
     init(config: LLMConfig = .openAI) {
         self.config = config
         print("LLM Service initialized with API Key: \(config.apiKey.prefix(10))...")
+        
+        // Add system message using shared prompt
+        messages.append(ChatMessage(role: "system", content: SystemPrompt.shared))
     }
     
     // 发送消息到LLM

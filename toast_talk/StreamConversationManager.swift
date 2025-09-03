@@ -18,12 +18,26 @@ class StreamConversationManager: ObservableObject {
     @Published var audioLevel: Float = 0.0
     @Published var currentAIResponse = ""
     @Published var isSpeaking = false  // 添加独立的语音播放状态
+    @Published var enableVoicePlayback = false  // 语音播放开关，默认关闭
     
     private let speechManager = AutoSpeechManager()
     private let llmService = StreamLLMService()
     let voiceManager = VoiceManager()  // 改为let以便外部访问
+    private let codeExecutor = UniversalCodeExecutor()  // 添加代码执行器
     
     init() {
+        print("StreamConversationManager初始化完成")
+        
+        // 测试日志功能
+        print("尝试写入日志...")
+        LogManager.shared.logSystem("StreamConversationManager 初始化完成")
+        LogManager.shared.log("测试日志条目 - 时间: \(Date())", category: .system)
+        
+        if let logPath = LogManager.shared.getCurrentLogPath() {
+            print("当前日志路径: \(logPath)")
+        } else {
+            print("警告: 无法获取日志路径")
+        }
         // 监听语音更新事件（流式）
         NotificationCenter.default.addObserver(
             self,
@@ -101,6 +115,9 @@ class StreamConversationManager: ObservableObject {
         // 添加用户输入到对话历史
         conversationHistory += "你: \(transcribedText)\n"
         
+        // 记录用户输入到日志
+        LogManager.shared.logConversation(user: transcribedText)
+        
         // 清空当前AI响应
         currentAIResponse = ""
         conversationHistory += "AI: "
@@ -117,12 +134,25 @@ class StreamConversationManager: ObservableObject {
         // 完成后添加换行
         conversationHistory += "\n\n"
         
+        // 记录AI响应到日志
+        LogManager.shared.logConversation(assistant: currentAIResponse)
+        
+        // 执行代码块
+        print("准备执行代码块，AI响应: \(currentAIResponse.prefix(100))...")
+        let executionResults = await codeExecutor.processLLMResponse(currentAIResponse)
+        print("代码执行结果数量: \(executionResults.count)")
+        
+        // 如果有执行结果，记录并反馈
+        if !executionResults.isEmpty {
+            await processExecutionResultsRecursively(executionResults)
+        }
+        
         // AI文本响应完成，立即更新处理状态
         print("LLM响应完成，更新isProcessing = false")
         isProcessing = false
         
         // 语音播放完整响应（在后台进行，不影响按钮状态）
-        if !currentAIResponse.isEmpty {
+        if !currentAIResponse.isEmpty && enableVoicePlayback {
             print("开始播放语音")
             voiceManager.speak(currentAIResponse)
         }
@@ -153,5 +183,43 @@ class StreamConversationManager: ObservableObject {
     
     func stopSpeaking() {
         voiceManager.stopSpeaking()
+    }
+    
+    // 递归处理执行结果，直到没有新代码需要执行
+    private func processExecutionResultsRecursively(_ results: [ExecutionResult]) async {
+        var feedbackMessage = "以下是代码执行结果:\n\n"
+        for result in results {
+            feedbackMessage += result.formattedResult + "\n\n"
+        }
+        
+        // 记录执行结果
+        LogManager.shared.log("代码执行结果反馈", category: .codeExecution)
+        
+        // 发送执行结果给LLM进行下一轮对话
+        conversationHistory += "执行结果:\n" + feedbackMessage + "\n"
+        conversationHistory += "AI: "
+        
+        var newAIResponse = ""
+        await llmService.sendMessageStream(feedbackMessage) { [weak self] chunk in
+            guard let self = self else { return }
+            self.conversationHistory += chunk
+            newAIResponse += chunk
+        }
+        
+        conversationHistory += "\n\n"
+        
+        // 记录新的AI响应
+        if !newAIResponse.isEmpty {
+            LogManager.shared.logConversation(assistant: newAIResponse)
+        }
+        
+        // 检查新响应中是否有可执行代码
+        let newExecutionResults = await codeExecutor.processLLMResponse(newAIResponse)
+        
+        // 如果有新的执行结果，继续递归处理
+        if !newExecutionResults.isEmpty {
+            print("发现新的可执行代码，继续处理...")
+            await processExecutionResultsRecursively(newExecutionResults)
+        }
     }
 }

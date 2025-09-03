@@ -1,0 +1,2 @@
+CONDA_ENV_NAME=toast_talk_env
+PYTHON_PATH=/opt/homebrew/Caskroom/miniforge/base/envs/toast_talk_env/bin/python

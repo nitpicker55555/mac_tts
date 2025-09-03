@@ -18,6 +18,9 @@ class StreamLLMService: ObservableObject {
     
     init(config: LLMConfig = .openAI) {
         self.config = config
+        
+        // Add system message using shared prompt
+        messages.append(ChatMessage(role: "system", content: SystemPrompt.shared))
     }
     
     // 发送消息并流式接收响应
