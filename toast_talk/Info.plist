@@ -6,5 +6,11 @@
     <string>本应用需要访问麦克风来实现语音转文字功能</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>本应用需要使用语音识别功能来将您的语音转换为文字</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>本应用需要访问您的位置来提供基于当前位置的路线导航服务</string>
+    <key>NSLocationAlwaysUsageDescription</key>
+    <string>本应用需要访问您的位置来提供基于当前位置的路线导航服务</string>
+    <key>NSLocationUsageDescription</key>
+    <string>本应用需要访问您的位置来提供基于当前位置的路线导航服务</string>
 </dict>
 </plist>

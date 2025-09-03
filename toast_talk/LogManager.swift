@@ -42,14 +42,14 @@ class LogManager {
     }
     
     private func createDailyLogFile() {
-        let fileName = "toast_talk_\(dateFormatter.string(from: Date())).log"
+        let fileName = "toast_talk_tool_\(dateFormatter.string(from: Date())).log"
         currentLogFile = logDirectory.appendingPathComponent(fileName)
         
         // 如果文件不存在，创建并写入头部信息
         if !FileManager.default.fileExists(atPath: currentLogFile!.path) {
             let header = """
             ========================================
-            Toast Talk 日志文件
+            Toast Talk 工具日志文件
             创建时间: \(timestampFormatter.string(from: Date()))
             ========================================
             
@@ -111,6 +111,26 @@ class LogManager {
     /// 记录系统事件
     func logSystem(_ message: String) {
         let logEntry = formatLogEntry(message, level: .info, category: .system)
+        writeToFile(logEntry)
+    }
+    
+    /// 记录工具执行
+    func logTool(_ message: String, toolName: String? = nil) {
+        var fullMessage = message
+        if let name = toolName {
+            fullMessage = "[工具: \(name)] " + message
+        }
+        let logEntry = formatLogEntry(fullMessage, level: .info, category: .tool)
+        writeToFile(logEntry)
+    }
+    
+    /// 记录API调用
+    func logAPI(_ message: String, endpoint: String? = nil) {
+        var fullMessage = message
+        if let endpoint = endpoint {
+            fullMessage = "[API: \(endpoint)] " + message
+        }
+        let logEntry = formatLogEntry(fullMessage, level: .info, category: .api)
         writeToFile(logEntry)
     }
     
@@ -215,4 +235,6 @@ enum LogCategory: String {
     case codeExecution = "代码执行"
     case system = "系统"
     case network = "网络"
+    case tool = "工具"
+    case api = "API"
 }
