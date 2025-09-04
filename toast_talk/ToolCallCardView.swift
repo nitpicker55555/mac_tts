@@ -30,6 +30,7 @@ struct ToolCallCardView: View {
     let toolCall: ToolCallCard
     @State private var isExpanded = false
     @State private var showContent = false
+    @State private var isHovering = false
     
     var statusColor: Color {
         switch toolCall.status {
@@ -110,10 +111,6 @@ struct ToolCallCardView: View {
                                 .foregroundColor(statusColor)
                         }
                         
-                        // 展开/收起图标
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
                     }
                 }
                 .padding(12)
@@ -173,13 +170,18 @@ struct ToolCallCardView: View {
                 ))
             }
         }
-        .background(.ultraThinMaterial)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.9))
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .scaleEffect(isHovering ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isHovering)
+        .onHover { hovering in
+            isHovering = hovering
+        }
     }
     
     private func timeString(from date: Date) -> String {
@@ -199,6 +201,7 @@ struct CodeExecutionCardView: View {
     let status: ToolCallCard.Status
     @State private var isExpanded = false
     @State private var showContent = false
+    @State private var isHovering = false
     
     var languageIcon: String {
         switch language.lowercased() {
@@ -292,9 +295,6 @@ struct CodeExecutionCardView: View {
                                 .frame(width: 8, height: 8)
                         }
                         
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
                     }
                 }
                 .padding(12)
@@ -355,13 +355,18 @@ struct CodeExecutionCardView: View {
                 ))
             }
         }
-        .background(.ultraThinMaterial)
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.9))
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+        .scaleEffect(isHovering ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: isHovering)
+        .onHover { hovering in
+            isHovering = hovering
+        }
     }
     
     private func timeString(from date: Date) -> String {

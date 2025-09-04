@@ -13,6 +13,24 @@ struct ImprovedStreamChatToastView: View {
     @State private var dragOffset = CGSize.zero
     @State private var showVoiceSettings = false
     @State private var showMapView = false
+    @State private var windowHeight: CGFloat = 520
+    @State private var showHeightMenu = false
+    
+    enum HeightPreset: CGFloat, CaseIterable {
+        case compact = 400
+        case standard = 520
+        case tall = 650
+        case fullHeight = 780
+        
+        var label: String {
+            switch self {
+            case .compact: return "紧凑"
+            case .standard: return "标准"
+            case .tall: return "加高"
+            case .fullHeight: return "最大"
+            }
+        }
+    }
     
     var body: some View {
         ZStack {
@@ -59,6 +77,29 @@ struct ImprovedStreamChatToastView: View {
                             .buttonStyle(PlainButtonStyle())
                             .transition(.scale.combined(with: .opacity))
                         }
+                        
+                        // 高度调整按钮
+                        Menu {
+                            ForEach(HeightPreset.allCases, id: \.self) { preset in
+                                Button(action: {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        windowHeight = preset.rawValue
+                                    }
+                                }) {
+                                    HStack {
+                                        Text(preset.label)
+                                        if windowHeight == preset.rawValue {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "arrow.up.and.down")
+                                .foregroundColor(.white.opacity(0.5))
+                                .font(.system(size: 16))
+                        }
+                        .menuStyle(BorderlessButtonMenuStyle())
                         
                         // 语音设置按钮
                         Button(action: {
@@ -146,7 +187,7 @@ struct ImprovedStreamChatToastView: View {
                             }
                             .padding(12)
                         }
-                        .frame(height: 280)
+                        .frame(height: max(100, windowHeight - 240))
                         .background(.ultraThinMaterial)
                         .cornerRadius(12)
                         .onChange(of: conversation.messages.count) { _ in
@@ -296,8 +337,9 @@ struct ImprovedStreamChatToastView: View {
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
             }
+            
         }
-        .frame(width: 480, height: 520)
+        .frame(width: 480, height: windowHeight)
         .offset(dragOffset)
         .onDrag {
             isDragging = true

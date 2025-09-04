@@ -13,7 +13,6 @@ struct toast_talkApp: App {
         WindowGroup {
             ImprovedStreamChatToastView()
                 .customWindowStyle()
-                .frame(width: 480, height: 520)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
