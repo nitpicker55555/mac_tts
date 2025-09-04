@@ -137,15 +137,19 @@ class StreamConversationManagerWithTools: ObservableObject {
             LogManager.shared.log("处理工具结果，共 \(llmService.toolResults.count) 个", category: .tool)
             
             for toolResult in llmService.toolResults {
-                if let journeys = toolResult["journeys"] as? [[String: Any]] {
-                    print("找到路线数据，共 \(journeys.count) 条路线")
-                    LogManager.shared.log("找到路线数据，共 \(journeys.count) 条路线", category: .tool)
+                if toolResult["journeys"] != nil {
+                    print("找到路线数据")
+                    LogManager.shared.log("找到路线数据", category: .tool)
+                    
+                    // 使用完整的路线数据（从静态属性获取）
+                    let fullJourneys = TransitRouteTool.lastFullJourneys
+                    print("获取完整路线数据，共 \(fullJourneys.count) 条路线")
                     
                     // 保存所有路线数据用于增强版地图
-                    self.allJourneys = journeys
+                    self.allJourneys = fullJourneys
                     
                     // 获取第一条路线的数据（用于基础版地图）
-                    if let firstJourney = journeys.first,
+                    if let firstJourney = fullJourneys.first,
                        let geoJSONDict = firstJourney["geojson"] as? [String: Any],
                        let routeInfo = firstJourney["route_info"] as? String {
                         

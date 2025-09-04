@@ -36,6 +36,9 @@ struct ToolResponse: Codable {
 // MARK: - 交通路线搜索工具
 
 class TransitRouteTool: LLMTool {
+    // 静态属性用于存储完整的路线数据
+    static var lastFullJourneys: [[String: Any]] = []
+    
     let name = "search_transit_route"
     let description = "搜索两点之间的公共交通路线"
     let parameters: [String: Any] = [
@@ -221,6 +224,13 @@ class TransitRouteTool: LLMTool {
                             var stopData: [String: Any] = [
                                 "name": stopover.stop?.name ?? ""
                             ]
+                            // 添加位置信息
+                            if let location = stopover.stop?.location {
+                                stopData["location"] = [
+                                    "lat": location.latitude ?? 0,
+                                    "lon": location.longitude ?? 0
+                                ]
+                            }
                             if let arrival = stopover.arrival {
                                 stopData["arrival"] = arrival
                             }
@@ -247,6 +257,9 @@ class TransitRouteTool: LLMTool {
             
             response["journeys"] = journeys
             response["total_results"] = result.journeys.journeys.count
+            
+            // 保存完整数据供地图使用
+            TransitRouteTool.lastFullJourneys = journeys
             
             print("LLMToolSystem - 返回 journeys.count: \(journeys.count)")
             LogManager.shared.logTool("成功返回 \(journeys.count) 条路线", toolName: "search_transit_route")
@@ -315,11 +328,57 @@ class LLMToolManager {
         // 执行工具
         let result = try await tool.execute(parameters: parameters)
         
+        // 对路线搜索工具的结果进行特殊处理
+        var processedResult = result
+        if toolCall.function.name == "search_transit_route",
+           let resultDict = result as? [String: Any] {
+            processedResult = simplifyTransitRouteResult(resultDict)
+        }
+        
         // 将结果转换为JSON字符串
-        let resultData = try JSONSerialization.data(withJSONObject: result)
+        let resultData = try JSONSerialization.data(withJSONObject: processedResult)
         let resultString = String(data: resultData, encoding: .utf8) ?? "{}"
         
         return ToolResponse(toolCallId: toolCall.id, content: resultString)
+    }
+    
+    // 简化路线搜索结果，避免消息历史过大
+    private func simplifyTransitRouteResult(_ result: [String: Any]) -> [String: Any] {
+        guard let journeys = result["journeys"] as? [[String: Any]] else {
+            return result
+        }
+        
+        var simplifiedJourneys: [[String: Any]] = []
+        for journey in journeys {
+            var simplified: [String: Any] = [
+                "route_info": journey["route_info"] as? String ?? "",
+                "departure": journey["departure"] as? String ?? "",
+                "arrival": journey["arrival"] as? String ?? ""
+            ]
+            
+            // 只包含简化的legs信息
+            if let legs = journey["legs"] as? [[String: Any]] {
+                var legsInfo: [String] = []
+                for leg in legs {
+                    if let walking = leg["walking"] as? Bool, walking {
+                        legsInfo.append("步行")
+                    } else if let line = leg["line"] as? [String: Any],
+                              let name = line["name"] as? String {
+                        legsInfo.append(name)
+                    }
+                }
+                simplified["transport_modes"] = legsInfo
+            }
+            
+            simplifiedJourneys.append(simplified)
+        }
+        
+        return [
+            "status": result["status"] as? String ?? "success",
+            "message": result["message"] as? String ?? "",
+            "total_results": result["total_results"] as? Int ?? 0,
+            "journeys": simplifiedJourneys
+        ]
     }
 }
 

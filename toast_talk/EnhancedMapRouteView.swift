@@ -145,7 +145,12 @@ struct EnhancedMapRouteView: View {
     private func focusOnLeg(journeyIndex: Int, legIndex: Int) {
         guard journeyIndex < journeys.count,
               let legs = journeys[journeyIndex]["legs"] as? [[String: Any]],
-              legIndex < legs.count else { return }
+              legIndex < legs.count else { 
+            print("focusOnLeg - 参数无效: journeyIndex=\(journeyIndex), legIndex=\(legIndex)")
+            return 
+        }
+        
+        print("focusOnLeg - 聚焦路段: journey=\(journeyIndex), leg=\(legIndex)")
         
         let leg = legs[legIndex]
         var coordinates: [CLLocationCoordinate2D] = []
@@ -153,15 +158,15 @@ struct EnhancedMapRouteView: View {
         // 收集路段的所有坐标点
         if let origin = leg["origin"] as? [String: Any],
            let location = origin["location"] as? [String: Any],
-           let lat = location["latitude"] as? Double,
-           let lng = location["longitude"] as? Double {
+           let lat = location["lat"] as? Double,
+           let lng = location["lon"] as? Double {
             coordinates.append(CLLocationCoordinate2D(latitude: lat, longitude: lng))
         }
         
         if let destination = leg["destination"] as? [String: Any],
            let location = destination["location"] as? [String: Any],
-           let lat = location["latitude"] as? Double,
-           let lng = location["longitude"] as? Double {
+           let lat = location["lat"] as? Double,
+           let lng = location["lon"] as? Double {
             coordinates.append(CLLocationCoordinate2D(latitude: lat, longitude: lng))
         }
         
@@ -169,8 +174,8 @@ struct EnhancedMapRouteView: View {
         if let stopovers = leg["stopovers"] as? [[String: Any]] {
             for stopover in stopovers {
                 if let location = stopover["location"] as? [String: Any],
-                   let lat = location["latitude"] as? Double,
-                   let lng = location["longitude"] as? Double {
+                   let lat = location["lat"] as? Double,
+                   let lng = location["lon"] as? Double {
                     coordinates.append(CLLocationCoordinate2D(latitude: lat, longitude: lng))
                 }
             }
@@ -178,6 +183,8 @@ struct EnhancedMapRouteView: View {
         
         // 计算包含所有点的区域
         if !coordinates.isEmpty {
+            print("focusOnLeg - 收集到 \(coordinates.count) 个坐标点")
+            
             var minLat = coordinates[0].latitude
             var maxLat = coordinates[0].latitude
             var minLon = coordinates[0].longitude
