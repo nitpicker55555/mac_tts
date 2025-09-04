@@ -222,10 +222,10 @@ class ImprovedStreamConversationManager: ObservableObject {
             }
         )
         
-        // 处理工具结果
-        if !llmService.toolResults.isEmpty {
-            await handleToolResults()
-        }
+        // 工具结果已在执行回调中处理，这里不需要再处理
+        // if !llmService.toolResults.isEmpty {
+        //     await handleToolResults()
+        // }
         
         // 记录AI响应
         LogManager.shared.logConversation(assistant: accumulatedText)
@@ -273,69 +273,8 @@ class ImprovedStreamConversationManager: ObservableObject {
         }
     }
     
-    private func handleToolResults() async {
-        print("处理工具结果，共 \(llmService.toolResults.count) 个")
-        LogManager.shared.log("处理工具结果，共 \(llmService.toolResults.count) 个", category: .tool)
-        
-        for toolResult in llmService.toolResults {
-            if toolResult["journeys"] != nil {
-                print("找到路线数据")
-                LogManager.shared.log("找到路线数据", category: .tool)
-                
-                // 使用完整的路线数据
-                let fullJourneys = TransitRouteTool.lastFullJourneys
-                print("获取完整路线数据，共 \(fullJourneys.count) 条路线")
-                
-                // 更新工具调用卡片状态
-                if let lastToolIndex = messages.lastIndex(where: {
-                    if case .toolCall(let toolCallCard) = $0.type,
-                       toolCallCard.toolName.contains("交通路线") {
-                        return true
-                    }
-                    return false
-                }) {
-                    var updatedToolCall = messages[lastToolIndex]
-                    if case .toolCall(var toolCallCard) = updatedToolCall.type {
-                        toolCallCard = ToolCallCard(
-                            toolName: toolCallCard.toolName,
-                            timestamp: toolCallCard.timestamp,
-                            input: toolCallCard.input,
-                            output: "找到 \(fullJourneys.count) 条路线",
-                            status: .success,
-                            icon: toolCallCard.icon
-                        )
-                        messages[lastToolIndex] = ConversationMessage(
-                            id: updatedToolCall.id,
-                            type: .toolCall(toolCallCard),
-                            timestamp: updatedToolCall.timestamp
-                        )
-                    }
-                }
-                
-                // 保存路线数据
-                self.allJourneys = fullJourneys
-                
-                // 获取第一条路线的数据
-                if let firstJourney = fullJourneys.first,
-                   let geoJSONDict = firstJourney["geojson"] as? [String: Any],
-                   let routeInfo = firstJourney["route_info"] as? String {
-                    
-                    do {
-                        let jsonData = try JSONSerialization.data(withJSONObject: geoJSONDict)
-                        let geoJSON = try JSONDecoder().decode(GeoJSONFeatureCollection.self, from: jsonData)
-                        
-                        self.currentGeoJSON = geoJSON
-                        self.currentRouteInfo = routeInfo
-                        self.showMapView = true
-                        
-                        print("成功加载路线数据，准备显示地图")
-                    } catch {
-                        print("解析GeoJSON失败: \(error)")
-                    }
-                }
-            }
-        }
-    }
+    // 此方法已弃用，工具结果在执行回调中处理
+    // private func handleToolResults() async { }
     
     private func processExecutionResultsRecursively(_ results: [ExecutionResult]) async {
         var feedbackMessage = "以下是代码执行结果:\n\n"
