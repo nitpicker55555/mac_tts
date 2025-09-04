@@ -29,93 +29,74 @@ struct EnhancedMapRouteView: View {
     @State private var isDragging = false  // 新增：拖拽状态
     
     var body: some View {
-        VStack(spacing: 0) {
-            // 顶部拖拽条
-            HStack {
-                Spacer()
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.gray.opacity(0.5))
-                    .frame(width: 60, height: 6)
-                    .padding(.vertical, 8)
-                Spacer()
-            }
-            .background(Color(NSColor.controlBackgroundColor))
-            .onDrag {
-                isDragging = true
-                return NSItemProvider()
-            }
+        ZStack(alignment: .leading) {
+            // 底层：地图全屏显示
+            EnhancedMapKitView(
+                region: $region,
+                annotations: mapAnnotations,
+                routeSegments: routeSegments
+            )
+            .id(refreshID)
+            .edgesIgnoringSafeArea(.all)
             
-            HStack(spacing: 0) {
-                // 左侧：方案卡片列表
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("路线方案")
-                        .font(.headline)
-                        .padding(.horizontal)
-                        .padding(.top, 4)
-                    
-                    ScrollView {
-                        VStack(spacing: 12) {
-                            ForEach(0..<min(3, journeys.count), id: \.self) { index in
-                                JourneyCard(
-                                    journey: journeys[index],
-                                    journeyInfo: index < journeyInfos.count ? journeyInfos[index] : nil,
-                                    index: index,
-                                    isSelected: selectedJourneyIndex == index,
-                                    isExpanded: expandedJourneyIndex == index,
-                                    onSelect: {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
+            // 浮层：左侧方案卡片列表
+            VStack(alignment: .leading, spacing: 12) {
+                Text("路线方案")
+                    .font(.headline)
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+                
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(0..<min(3, journeys.count), id: \.self) { index in
+                            JourneyCard(
+                                journey: journeys[index],
+                                journeyInfo: index < journeyInfos.count ? journeyInfos[index] : nil,
+                                index: index,
+                                isSelected: selectedJourneyIndex == index,
+                                isExpanded: expandedJourneyIndex == index,
+                                onSelect: {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        selectedJourneyIndex = index
+                                        focusedLegIndex = nil
+                                        loadSelectedJourney()
+                                    }
+                                },
+                                onToggleExpand: {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        if expandedJourneyIndex == index {
+                                            expandedJourneyIndex = nil
+                                        } else {
+                                            expandedJourneyIndex = index
                                             selectedJourneyIndex = index
                                             focusedLegIndex = nil
                                             loadSelectedJourney()
                                         }
-                                    },
-                                    onToggleExpand: {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            if expandedJourneyIndex == index {
-                                                expandedJourneyIndex = nil
-                                            } else {
-                                                expandedJourneyIndex = index
-                                                selectedJourneyIndex = index
-                                                focusedLegIndex = nil
-                                                loadSelectedJourney()
-                                            }
-                                        }
-                                    },
-                                    onLegTap: { legIndex in
-                                        focusOnLeg(journeyIndex: index, legIndex: legIndex)
                                     }
-                                )
-                            }
+                                },
+                                onLegTap: { legIndex in
+                                    focusOnLeg(journeyIndex: index, legIndex: legIndex)
+                                }
+                            )
                         }
-                        .padding(.horizontal)
-                        .padding(.bottom)
                     }
-                }
-                .frame(width: 350)
-                .background(Color(NSColor.controlBackgroundColor))
-                
-                // 右侧：地图视图
-                VStack(spacing: 0) {
-                    // 地图
-                    EnhancedMapKitView(
-                        region: $region,
-                        annotations: mapAnnotations,
-                        routeSegments: routeSegments
-                    )
-                    .id(refreshID)
-                    
-                    // 图例
-                    RouteLegend()
-                        .padding()
-                        .background(Color(NSColor.controlBackgroundColor).opacity(0.9))
+                    .padding(.horizontal)
+                    .padding(.bottom)
                 }
             }
+            .frame(width: 350)
+            .frame(maxHeight: .infinity)
+            .background(.ultraThinMaterial)  // 毛玻璃效果
+            .mask(
+                RoundedRectangle(cornerRadius: 0)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .offset(x: -12)
+                    )
+            )
+            .shadow(radius: 10)
         }
-        .frame(width: 900, height: 700)
-        .background(Color(NSColor.windowBackgroundColor))
-        .cornerRadius(12)
-        .shadow(radius: 10)
-        .offset(x: windowPosition.x, y: windowPosition.y)
+        .frame(minWidth: 900, idealWidth: 900, maxWidth: .infinity, minHeight: 700, idealHeight: 700, maxHeight: .infinity)
         .onAppear {
             parseAllJourneys()
             if initialSelectedIndex < journeys.count {
@@ -209,14 +190,19 @@ struct EnhancedMapRouteView: View {
                 maxLon = max(maxLon, coord.longitude)
             }
             
+            // 计算偏移后的中心点
+            let centerLat = (minLat + maxLat) / 2
+            let centerLon = (minLon + maxLon) / 2
+            let lonOffset = (maxLon - minLon) * 0.25  // 向右偏移
+            
             let center = CLLocationCoordinate2D(
-                latitude: (minLat + maxLat) / 2,
-                longitude: (minLon + maxLon) / 2
+                latitude: centerLat,
+                longitude: centerLon + lonOffset
             )
             
-            // 计算合适的缩放级别，路段通常需要更近的视角
-            let latDelta = (maxLat - minLat) * 2.0  // 增加边距
-            let lonDelta = (maxLon - minLon) * 2.0
+            // 计算合适的缩放级别
+            let latDelta = (maxLat - minLat) * 2.5
+            let lonDelta = (maxLon - minLon) * 3.0  // 增加横向范围
             
             // 确保最小缩放级别
             let span = MKCoordinateSpan(
@@ -252,11 +238,8 @@ struct EnhancedMapRouteView: View {
                 
                 for leg in legs {
                     if let walking = leg["walking"] as? Bool, walking {
-                        let walkingLine = TransitLineInfo(name: "步行", type: .walking)
-                        if !addedLines.contains(walkingLine.name) {
-                            transitLines.append(walkingLine)
-                            addedLines.insert(walkingLine.name)
-                        }
+                        // 跳过步行段，不显示步行标签
+                        continue
                     } else if let line = leg["line"] as? [String: Any] {
                         let mode = line["mode"] as? String ?? ""
                         let lineName = line["name"] as? String ?? "未知线路"
@@ -456,13 +439,18 @@ struct EnhancedMapRouteView: View {
             maxLon = max(maxLon, coord.longitude)
         }
         
+        // 计算中心点，但偏移到右侧以避免被左侧面板遮挡
+        let centerLat = (minLat + maxLat) / 2
+        let centerLon = (minLon + maxLon) / 2
+        let lonOffset = (maxLon - minLon) * 0.25  // 向右偏移25%
+        
         let center = CLLocationCoordinate2D(
-            latitude: (minLat + maxLat) / 2,
-            longitude: (minLon + maxLon) / 2
+            latitude: centerLat,
+            longitude: centerLon + lonOffset
         )
         let span = MKCoordinateSpan(
-            latitudeDelta: (maxLat - minLat) * 1.3,
-            longitudeDelta: (maxLon - minLon) * 1.3
+            latitudeDelta: (maxLat - minLat) * 1.5,
+            longitudeDelta: (maxLon - minLon) * 2.0  // 增加横向范围以显示完整路线
         )
         
         self.region = MKCoordinateRegion(center: center, span: span)
@@ -566,7 +554,8 @@ struct JourneyCard: View {
                     }
                 }
                 .padding()
-                .background(isSelected ? Color.accentColor : Color(NSColor.controlBackgroundColor))
+                .background(isSelected ? Color.accentColor.opacity(0.8) : Color.clear)
+                .background(.ultraThinMaterial)  // 毛玻璃效果
                 .cornerRadius(12)
                 .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
             }
@@ -1646,3 +1635,4 @@ struct StopoverInfo {
     let name: String
     var time: String?
 }
+

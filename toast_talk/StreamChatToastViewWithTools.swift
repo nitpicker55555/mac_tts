@@ -16,19 +16,15 @@ struct StreamChatToastViewWithTools: View {
     
     var body: some View {
         ZStack {
-            // 背景
+            // 毛玻璃背景
             RoundedRectangle(cornerRadius: 25)
-                .fill(Color.black.opacity(0.85))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 25)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
+                .fill(.ultraThinMaterial)
             
             VStack(spacing: 16) {
                 // 拖动区域
                 HStack {
                     Capsule()
-                        .fill(Color.white.opacity(0.3))
+                        .fill(Color.gray.opacity(0.4))
                         .frame(width: 40, height: 4)
                         .padding(.top, 8)
                 }
@@ -38,16 +34,23 @@ struct StreamChatToastViewWithTools: View {
                     // 标题栏
                     HStack {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(.primary)
                         Text("AI 对话助手（含工具）")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                         Spacer()
                         
                         // 地图按钮（当有路线数据时显示）
-                        if conversation.currentGeoJSON != nil {
+                        if !conversation.allJourneys.isEmpty || conversation.currentGeoJSON != nil {
                             Button(action: {
-                                showMapView = true
+                                if !conversation.allJourneys.isEmpty {
+                                    RouteMapWindowController.shared.showRouteMap(
+                                        journeys: conversation.allJourneys,
+                                        initialSelectedIndex: 0
+                                    )
+                                } else {
+                                    showMapView = true  // 降级方案
+                                }
                             }) {
                                 Image(systemName: "map.fill")
                                     .foregroundColor(.blue.opacity(0.8))
@@ -103,7 +106,7 @@ struct StreamChatToastViewWithTools: View {
                                             .padding(.leading, 20)
                                         }
                                         .padding(12)
-                                        .background(Color.white.opacity(0.1))
+                                        .background(Color.black.opacity(0.05))
                                         .cornerRadius(8)
                                     }
                                     .frame(maxWidth: .infinity)
@@ -111,7 +114,7 @@ struct StreamChatToastViewWithTools: View {
                                 } else {
                                     Text(conversation.conversationHistory)
                                         .font(.system(size: 14))
-                                        .foregroundColor(.white.opacity(0.9))
+                                        .foregroundColor(.primary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         .textSelection(.enabled)
                                         .id("bottom")
@@ -120,7 +123,7 @@ struct StreamChatToastViewWithTools: View {
                             .padding(12)
                         }
                         .frame(height: 200)
-                        .background(Color.white.opacity(0.1))
+                        .background(Color.black.opacity(0.05))
                         .cornerRadius(12)
                         .onChange(of: conversation.conversationHistory) { _ in
                             withAnimation(.easeOut(duration: 0.2)) {
@@ -137,13 +140,13 @@ struct StreamChatToastViewWithTools: View {
                                 .foregroundColor(.green)
                             Text(conversation.transcribedText)
                                 .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(.secondary)
                                 .lineLimit(2)
                             Spacer()
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(Color.white.opacity(0.15))
+                        .background(Color.black.opacity(0.05))
                         .cornerRadius(8)
                         .transition(.opacity)
                     }
@@ -171,10 +174,10 @@ struct StreamChatToastViewWithTools: View {
                                 Text(conversation.isProcessing ? "处理中..." : (conversation.isRecording ? "停止" : "说话"))
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .foregroundColor(conversation.isRecording || conversation.isProcessing ? .black : .white)
+                            .foregroundColor(conversation.isRecording || conversation.isProcessing ? .white : .primary)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 8)
-                            .background(conversation.isRecording || conversation.isProcessing ? Color.white : Color.white.opacity(0.2))
+                            .background(conversation.isRecording || conversation.isProcessing ? Color.red : Color.black.opacity(0.1))
                             .cornerRadius(20)
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -187,9 +190,9 @@ struct StreamChatToastViewWithTools: View {
                             }) {
                                 Image(systemName: "speaker.slash.fill")
                                     .font(.system(size: 14))
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .foregroundColor(.primary)
                                     .padding(8)
-                                    .background(Color.white.opacity(0.1))
+                                    .background(Color.black.opacity(0.1))
                                     .cornerRadius(20)
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -203,9 +206,9 @@ struct StreamChatToastViewWithTools: View {
                         }) {
                             Image(systemName: "trash")
                                 .font(.system(size: 14))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(.primary)
                                 .padding(8)
-                                .background(Color.white.opacity(0.1))
+                                .background(Color.black.opacity(0.1))
                                 .cornerRadius(20)
                         }
                         .buttonStyle(PlainButtonStyle())
@@ -235,7 +238,7 @@ struct StreamChatToastViewWithTools: View {
                                     .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: conversation.isRecording)
                                 Text("正在监听... (说完后自动停止)")
                                     .font(.system(size: 11))
-                                    .foregroundColor(.white.opacity(0.6))
+                                    .foregroundColor(.secondary)
                             }
                         }
                         .transition(.opacity)
@@ -245,7 +248,7 @@ struct StreamChatToastViewWithTools: View {
                     if !conversation.errorMessage.isEmpty {
                         Text(conversation.errorMessage)
                             .font(.system(size: 11))
-                            .foregroundColor(.red.opacity(0.8))
+                            .foregroundColor(.red)
                             .lineLimit(2)
                     }
                 }
@@ -262,23 +265,29 @@ struct StreamChatToastViewWithTools: View {
         .sheet(isPresented: $showVoiceSettings) {
             VoiceSettingsView(voiceManager: conversation.voiceManager)
         }
+        // 监听地图显示状态
+        .onChange(of: conversation.showMapView) { newValue in
+            if newValue {
+                if !conversation.allJourneys.isEmpty {
+                    // 使用独立窗口显示路线地图
+                    RouteMapWindowController.shared.showRouteMap(
+                        journeys: conversation.allJourneys,
+                        initialSelectedIndex: 0
+                    )
+                } else if let geoJSON = conversation.currentGeoJSON {
+                    // 降级使用sheet显示基础地图视图
+                    showMapView = true
+                }
+                conversation.showMapView = false
+            }
+        }
         .sheet(isPresented: $showMapView) {
-            if !conversation.allJourneys.isEmpty {
-                // 使用增强版地图视图显示多个路线
-                EnhancedMapRouteView(journeys: conversation.allJourneys)
-            } else if let geoJSON = conversation.currentGeoJSON {
-                // 降级到基础版地图视图
+            // 仅用于降级方案
+            if let geoJSON = conversation.currentGeoJSON {
                 MapRouteView(
                     geoJSON: geoJSON,
                     routeInfo: conversation.currentRouteInfo
                 )
-            }
-        }
-        // 监听地图显示状态
-        .onChange(of: conversation.showMapView) { newValue in
-            if newValue && conversation.currentGeoJSON != nil {
-                showMapView = true
-                conversation.showMapView = false
             }
         }
     }
