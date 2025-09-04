@@ -11,9 +11,9 @@ import SwiftUI
 struct toast_talkApp: App {
     var body: some Scene {
         WindowGroup {
-            StreamChatToastViewWithTools()
+            ImprovedStreamChatToastView()
                 .customWindowStyle()
-                .frame(width: 400, height: 450)
+                .frame(width: 480, height: 520)
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
